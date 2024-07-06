@@ -13,7 +13,7 @@ export default function Home() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('C:\Users\Max\Anna\app\api\fetchmetrics\metric.tsx', {
+      const response = await fetch('fetchmetric.tsx', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
