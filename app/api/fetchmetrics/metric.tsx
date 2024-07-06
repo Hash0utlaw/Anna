@@ -1,5 +1,3 @@
-// app/api/fetchMetrics/route.ts
-
 import { NextResponse } from 'next/server';
 import { scrapeInstagram, scrapeFacebook } from '../../../lib/scraper';
 

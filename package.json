@@ -13,11 +13,12 @@
     "chart.js": "^4.4.3",
     "next": "14.2.4",
     "next-auth": "^4.24.7",
-    "puppeteer": "^22.12.1",
+    "selenium-webdriver": "^4.0.0",
     "react": "^18",
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^18",
-    "react-facebook-login-lite": "^1.0.0"
+    "react-facebook-login-lite": "^1.0.0",
+    "chromedriver": "^108.0.0"
   },
   "devDependencies": {
     "@types/next": "^9.0.0",

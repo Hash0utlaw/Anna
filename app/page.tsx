@@ -1,4 +1,4 @@
-'use client'
+'use client';
 
 import { useState } from 'react';
 import AccountInput from '../components/AccountInput';
@@ -13,7 +13,7 @@ export default function Home() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/fetchMetrics', {
+      const response = await fetch('C:\Users\Max\Anna\app\api\fetchmetrics\metric.tsx', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
