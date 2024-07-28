@@ -16,6 +16,25 @@ MAX_SCROLL_ATTEMPTS = 10  # Limit the number of scrolling attempts
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+# Updated reel selectors
+reel_selectors = [
+    "div[role='button']:has(div[data-visualcompletion='media-vc-image'])",
+    "div[role='button']:has(img[alt*='Reel'])",
+    "div[data-visualcompletion='media-message']",
+    "div[role='button']:has(svg[aria-label='Clip'])"
+]
+
+async def launch_browser_with_retry(playwright, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            browser = await playwright.chromium.launch(headless=False)
+            logging.info("Successfully launched browser")
+            return browser
+        except Exception as e:
+            logging.error(f"Failed to launch browser (attempt {attempt + 1}): {str(e)}")
+            if attempt == max_retries - 1:
+                raise
+
 async def login_to_instagram(page, username, password):
     await page.goto("https://www.instagram.com/")
     logging.info("Loaded Instagram login page")
@@ -92,11 +111,20 @@ async def scroll_messages(page):
         # Check new scroll position
         new_scroll = await message_area.evaluate('element => element.scrollTop')
         
+        logging.info(f"Scroll attempt {i+1}: Previous position: {current_scroll}, New position: {new_scroll}")
+        
         if new_scroll >= current_scroll:
             logging.info(f"Reached the top of the message thread after {i+1} attempts")
             break
         
         logging.info(f"Completed scroll {i+1}/{MAX_SCROLL_ATTEMPTS}")
+        
+        # Add a delay to allow content to load
+        await asyncio.sleep(2)
+    
+    # Log the entire HTML content of the message area
+    message_area_html = await message_area.evaluate('element => element.outerHTML')
+    logging.info(f"Message area HTML: {message_area_html}")
 
 async def wait_for_reel_viewer(page, timeout=REEL_WAIT_TIME):
     try:
@@ -156,13 +184,6 @@ async def download_reels(page, target_username, max_reels=MAX_REELS):
     
     await asyncio.sleep(10)
     
-    reel_selectors = [
-        "div[role='button']:has(div.xsgs5s9)",
-        "div[role='button']:has(video)",
-        "div._ab8w:has(div._aacl)",
-        "div[data-visualcompletion='media-message']"  # Added this selector
-    ]
-    
     while reel_count < max_reels and scroll_count < MAX_SCROLL_ATTEMPTS:
         await scroll_messages(page)
         scroll_count += 1
@@ -173,13 +194,13 @@ async def download_reels(page, target_username, max_reels=MAX_REELS):
                 logging.info(f"Found {len(potential_reels)} potential reel elements using selector: {selector}")
                 for element in potential_reels:
                     try:
-                        # Log the HTML content of the potential reel element
                         element_html = await page.evaluate('(element) => element.outerHTML', element)
                         logging.info(f"Potential reel element HTML: {element_html}")
                         
                         logging.info(f"Attempting to interact with potential reel {reel_count + 1}")
                         await element.scroll_into_view_if_needed()
                         await element.click()
+                        
                         if await wait_for_reel_viewer(page):
                             video_element = await page.query_selector('video')
                             if video_element:
@@ -198,7 +219,6 @@ async def download_reels(page, target_username, max_reels=MAX_REELS):
                             logging.warning("Reel viewer did not load within the expected time")
                         
                         await close_reel_viewer(page)
-                        
                         await asyncio.sleep(3)
                     except Exception as e:
                         logging.error(f"Error processing potential reel: {str(e)}")
@@ -224,22 +244,13 @@ async def main():
         logging.error("Instagram credentials or target username not found in environment variables")
         return
     
-    async with async_playwright() as p:
-        for browser_type in [p.chromium, p.firefox, p.webkit]:
-            try:
-                browser = await browser_type.launch(headless=False)
-                logging.info(f"Successfully launched {browser_type.name}")
-                break
-            except Exception as e:
-                logging.warning(f"Failed to launch {browser_type.name}: {str(e)}")
-        else:
-            logging.error("Failed to launch any browser. Please ensure at least one browser is installed.")
-            return
-
-        context = await browser.new_context()
-        page = await context.new_page()
-        
-        try:
+    browser = None
+    try:
+        async with async_playwright() as p:
+            browser = await launch_browser_with_retry(p)
+            context = await browser.new_context()
+            page = await context.new_page()
+            
             await login_to_instagram(page, username, password)
             await navigate_to_dms(page)
             video_paths = await download_reels(page, target_username)
@@ -249,14 +260,19 @@ async def main():
                 await cleanup(video_paths)
             else:
                 logging.info("No new reels to compile.")
-        
-        except Exception as e:
-            logging.error(f"An error occurred in main execution: {str(e)}")
+    
+    except Exception as e:
+        logging.error(f"An error occurred in main execution: {str(e)}")
+        if page:
             await page.screenshot(path='error_screenshot.png')
             logging.info("Screenshot saved as error_screenshot.png")
-        
-        finally:
-            await browser.close()
+    
+    finally:
+        if browser:
+            try:
+                await browser.close()
+            except Exception as e:
+                logging.error(f"Error closing browser: {str(e)}")
 
 if __name__ == "__main__":
     asyncio.run(main())
